@@ -7,3 +7,5 @@ New business rules belong in `domain`, orchestration in `application`, boundary 
 Released benchmarks are immutable. A benchmark change requires a new task or release version and updated content hashes. Evaluator material stays outside harness-visible worktrees.
 
 Before handoff run `git status --short`, `git diff --stat`, and `git diff --check`, then report only checks actually run.
+
+Pull requests use `.github/PULL_REQUEST_TEMPLATE.md`. Fill in the summary, check only validation commands that actually passed, and document skipped or failed checks in Notes.

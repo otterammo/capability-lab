@@ -1,3 +1,5 @@
+export PYTHONPATH := src
+
 .PHONY: setup format format-check lint typecheck test test-unit test-contract test-integration test-end-to-end architecture security check smoke diff-check
 
 setup:
