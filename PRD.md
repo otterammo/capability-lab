@@ -31,6 +31,7 @@ The platform must answer:
 - Prefer deterministic evaluation over model-based judging.
 - Keep research configurations separate from trusted daily-use configurations.
 - Require reproducible evidence before replacing a baseline.
+- Add infrastructure only when it enables a previously impossible experiment or materially reduces experimentation time.
 
 ## Goals
 
@@ -97,6 +98,8 @@ Use three task channels:
 
 Every experiment changes one declared major variable. Baseline and candidate use the same tasks, resource budgets, context limits, and repetition policy.
 
+Each experiment declares its hypothesis, target capability, independent variable, expected outcome, evaluation criteria, and promotion threshold before it runs.
+
 Deterministic scoring should use tests, compilation, type checking, schema validation, exact output checks, and diff policies. Human review is reserved for qualities that cannot be scored mechanically.
 
 ## Required Run Evidence
@@ -113,6 +116,8 @@ Every run records:
 - Human intervention count
 
 A bare `failed` result is insufficient. Initial failure categories include localization, repository understanding, reasoning, retrieval, missing knowledge, tool selection, tool execution, editing, verification, repair, environment, timeout, model runtime, evaluator, and unknown.
+
+Execution data is a reusable research dataset. Store experiment metadata, benchmark versions, model configurations, prompts, tool trajectories, retrieved context, validation results, successful patches, and failure traces.
 
 ## Success Metrics
 
@@ -145,6 +150,44 @@ A candidate can replace a baseline only when it:
 - Confirms the improvement on held-out tasks
 
 Promotion requires human approval in version 1.
+
+Automatic experiment generation and automatic baseline promotion are deferred until the manual promotion policy has proved reliable.
+
+## Memory Strategy
+
+Memory separates:
+
+- **Permanent:** repository architecture, coding conventions, and durable developer preferences
+- **Long-lived:** validated architectural summaries and recurring patterns
+- **Ephemeral:** current investigations and temporary hypotheses
+
+Obsolete information must expire or be superseded so stale context does not pollute later experiments.
+
+## Developer Workflow
+
+The common workflow should stay short:
+
+```text
+install -> diagnose environment -> run smoke benchmark -> compare results -> inspect failures -> create one experiment
+```
+
+Routine experimentation should require a few commands with sensible defaults.
+
+## Versioning
+
+Version independently:
+
+- Benchmark
+- Capability
+- Prompt
+- Model configuration
+- Harness
+- Retriever
+- Memory
+- Scorer
+- Experiment
+
+Every result must be reproducible from the recorded versions or content hashes.
 
 ## Capability Maturity
 

@@ -25,6 +25,8 @@ The root file should state:
 - Security and benchmark-integrity restrictions
 - Definition of done
 
+It should distinguish commands that exist today from commands that are proposed. Agents should not be forced to reconstruct workflow from CI configuration.
+
 Recommended required workflow:
 
 1. Read the governing task and nearest instructions.
@@ -65,6 +67,16 @@ docs/adr/
 
 Architecture docs should answer where new code belongs. ADRs record consequential decisions with context, alternatives, consequences, and status. A lightweight decision log handles smaller non-obvious choices.
 
+Useful architecture routing:
+
+```text
+New business rule -> domain
+New orchestration workflow -> application
+New external integration -> adapters
+New interface required by application logic -> ports
+New CLI command -> cli
+```
+
 ## Task Shape
 
 Agent tasks should specify:
@@ -81,6 +93,8 @@ Constraints
 Validation commands
 Expected deliverable
 ```
+
+For public interfaces, persistence, benchmark semantics, security boundaries, adapters, dependencies, or broad multi-file work, also include current behavior, proposed behavior, affected files or interfaces, test strategy, migration or compatibility concerns, explicit non-goals, and rollback plan.
 
 Require a written plan when work changes a public interface, persistence, benchmark semantics, a security boundary, an adapter, a dependency, several architectural modules, or more than about five files.
 
@@ -105,6 +119,15 @@ make diff-check
 ```
 
 Useful project commands include configuration resolution, benchmark validation, task inspection, run inspection, and repository maps. Add scaffolding commands only after repeated manual creation proves they save work.
+
+Diff review should always include:
+
+```text
+git status --short
+git diff --stat
+git diff --check
+git diff
+```
 
 ## Fast Feedback
 
@@ -136,6 +159,8 @@ Without explicit permission they may not:
 
 Use separate branches or worktrees for parallel agents. Assign one owner per overlapping file set and agree on shared interfaces before parallel implementation.
 
+Use conventional scoped commits when committing is explicitly requested. A useful branch convention is `agent/<task-id>-<short-description>` when the repository does not define one.
+
 ## Automated Enforcement
 
 Documentation is advisory; CI is authoritative. Enforce:
@@ -149,6 +174,49 @@ Documentation is advisory; CI is authoritative. Enforce:
 - Benchmark content hashes and release immutability
 - Evaluator separation
 - Diff checks for forbidden paths, unexpected generated files, secrets, and unrelated formatting churn
+
+Recommended CI jobs are format, lint, types, unit tests, contract tests, integration tests, architecture checks, migrations, schema validation, benchmark integrity, security checks, docs checks, and smoke tests. Expensive live-model benchmarks should be scheduled or manually invoked, not run on every commit.
+
+## Platform Integrity
+
+Evaluator integrity:
+
+- Hidden tests, scorer code, reference outputs, and promotion policies stay outside the agent-visible workspace.
+- Reports may expose scorer outcomes and artifact references, not hidden evaluator contents.
+
+Benchmark integrity:
+
+- Released manifests are immutable.
+- Corrections require new task or benchmark versions.
+- Baselines reference immutable benchmark releases and resolved configuration hashes.
+
+Experimental validity:
+
+- Change one declared major variable per experiment.
+- Keep baseline and candidate budgets, task sets, context limits, and repetition policy equal.
+- Record failed attempts and avoid selective reruns.
+
+Data integrity:
+
+- Completed run records are immutable.
+- Corrections create superseding records.
+- Artifact hashes and run provenance are part of the evidence, not optional metadata.
+
+## Error Taxonomy
+
+Use stable platform errors so failures can be diagnosed consistently:
+
+```text
+ConfigurationError
+WorkspaceError
+BenchmarkIntegrityError
+HarnessError
+ToolExecutionError
+ScoringError
+PersistenceError
+ArtifactError
+PromotionError
+```
 
 ## Dependency Policy
 

@@ -169,6 +169,51 @@ Tasks are declarative. A task includes:
 
 A benchmark release command validates tasks, verifies fixture revisions, computes hashes, reports coverage, and creates an immutable manifest. Corrections require a new task or benchmark version.
 
+Example task manifest:
+
+```yaml
+id: python.fix-incorrect-return
+version: 1.0.0
+capabilities:
+  - repository.navigation
+  - code.localization
+  - patch.generation
+  - change.verification
+repository:
+  fixture: incorrect-function
+  revision: 4c21d8f
+prompt: |
+  The protected test fails. Make the smallest source change that fixes it.
+budget:
+  timeout_seconds: 300
+  max_tool_calls: 40
+tool_policy:
+  ref: coding-minimal@1.0.0
+scorers:
+  - type: command
+    id: protected-test
+    command: ["uv", "run", "pytest", ".evaluation/test_behavior.py"]
+  - type: diff-scope
+    id: expected-files-only
+    allowed_paths: ["src/example.py"]
+  - type: forbidden-path
+    id: evaluator-protection
+    paths: [".evaluation"]
+metadata:
+  difficulty: basic
+  language: python
+  ambiguity: low
+  expected_change: true
+```
+
+Released benchmark manifests are immutable. A later release command may be added:
+
+```text
+lab benchmark release <benchmark-id> --version <version>
+```
+
+The release process validates tasks, verifies fixture revisions, calculates content hashes, rejects duplicate task IDs or versions, reports capability coverage, and writes a release record.
+
 ## Execution Lifecycle
 
 1. Load and validate the experiment.
@@ -200,6 +245,8 @@ Initial scorers:
 - Allowed diff scope
 - Forbidden path
 - No-change expectation
+
+Protected evaluator data may be used by scorers but must not be exposed through harness prompts, tool inputs, run reports, or agent-visible workspaces.
 
 ## Persistence
 
@@ -262,6 +309,8 @@ lab baseline list|show|promote|rollback
 
 All report commands support terminal and JSON output; comparison reports additionally support CSV and Markdown.
 
+Experiment summary reports should include pass-rate delta, runtime delta, timeout changes, regressions, newly passing tasks, promotion status, and capability breakdowns. Run inspection should show the prompt, resolved configuration hash, tool/event timeline, patch, scores, failure classification, artifacts, and reproduction commands.
+
 `lab doctor` checks Python, Git, database migrations, artifact storage, fixtures, disk space, and optional dependencies such as Docker and Ollama.
 
 ## Security and Resource Controls
@@ -269,6 +318,8 @@ All report commands support terminal and JSON output; comparison reports additio
 Live agents run as untrusted code. Docker execution will use a non-root user, disabled network by default, read-only mounts where possible, no host secrets, process and resource limits, bounded output, and command timeouts. Internal subprocesses use argument arrays rather than interpolated shell strings.
 
 Host-only agent execution requires an explicit unsafe option and cannot produce a promotable baseline.
+
+Tool policies are named profiles that grant only required capabilities. Dangerous capabilities include unrestricted shell, network access, package installation, committing, pushing, pull-request creation, forceful Git operations, and access to secrets or host-level paths.
 
 ## Testing
 
@@ -278,6 +329,34 @@ Host-only agent execution requires an explicit unsafe option and cannot produce 
 - One end-to-end test executes the deterministic smoke benchmark.
 
 Normal CI requires no GPU, live model, Ollama, Docker, or network access.
+
+Initial benchmark coverage should include development, validation, and held-out channels. Development tasks are for iteration, validation tasks select candidates, and held-out tasks are used only for milestone proof to reduce overfitting. Include no-change tasks so the platform measures restraint as well as editing.
+
+## Research Channels
+
+Run configurations move through three channels:
+
+- **Research:** exploratory prompts, retrieval, tools, and harness behavior
+- **Candidate:** frozen configuration under validation against a baseline
+- **Production:** human-approved default for bounded daily use
+
+Experimental results never become a baseline without the promotion policy and human approval.
+
+## Observability
+
+Record a structured JSON event timeline with experiment ID, run ID, task ID, component, event type, elapsed time, severity, and relevant artifact references. Track the unknown failure-classification rate; a rising unknown rate is evidence that event capture or classification rules need work.
+
+## Runtime State
+
+Default local state should be explicit and overridable:
+
+```text
+.lab/state.sqlite3
+.lab/artifacts/
+.lab/worktrees/
+```
+
+Temporary worktrees are deleted after collection. Immutable run artifacts and database records are retained until a deliberate retention policy exists; corrections create superseding records rather than rewriting completed runs.
 
 Required checks:
 
