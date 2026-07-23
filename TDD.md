@@ -1,7 +1,7 @@
 # Capability Optimization Platform: Technical Design
 
-**Version:** 0.1  
-**Status:** Proposed  
+**Version:** 0.1
+**Status:** Proposed
 **Deployment:** Single-user, local-first
 
 ## Technical Objective

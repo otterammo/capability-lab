@@ -1,7 +1,7 @@
 # Capability Optimization Platform
 
-**Version:** 0.1  
-**Status:** Proposed  
+**Version:** 0.1
+**Status:** Proposed
 **Initial user:** One software engineer running local models
 
 ## Summary
