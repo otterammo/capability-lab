@@ -1,0 +1,12 @@
+{
+  "schema_version": 2,
+  "id": "smoke",
+  "version": "1.0.1",
+  "channel": "development",
+  "tasks": [
+    {
+      "path": "../tasks/python.fix-incorrect-return@1.0.1.yaml",
+      "sha256": "4ba3114d758bfd8529686b401342d6a8cd307f8ef2a972dca9de2f9a81b075d2"
+    }
+  ]
+}

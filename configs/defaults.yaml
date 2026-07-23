@@ -1,0 +1,12 @@
+{
+  "name": "smoke",
+  "benchmark": "benchmarks/releases/smoke@1.0.1.yaml",
+  "harness": {"mode": "success"},
+  "paths": {
+    "state": ".lab/state.sqlite3",
+    "artifacts": ".lab/artifacts",
+    "worktrees": ".lab/worktrees",
+    "fixtures": ".lab/fixtures"
+  },
+  "seed": 1
+}
