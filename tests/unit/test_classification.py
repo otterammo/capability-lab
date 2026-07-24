@@ -31,3 +31,12 @@ def test_classification_is_deterministic(
     expected: str,
 ) -> None:
     assert classify(harness, scores) == FailureClassification(expected)
+
+
+def test_score_errors_can_be_used_as_failure_messages() -> None:
+    from capability_lab.application.service import _score_error
+
+    assert (
+        _score_error((ScoreResult("command", False, error="scorer timed out"),))
+        == "scorer timed out"
+    )

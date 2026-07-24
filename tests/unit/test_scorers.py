@@ -82,3 +82,40 @@ def test_forbidden_path_scorer_fails_on_hidden_change(tmp_path: Path) -> None:
 
     assert not result.passed
     assert result.category == "editing"
+
+
+def test_command_scorer_redacts_protected_output(tmp_path: Path) -> None:
+    observed = evidence(tmp_path)
+    (tmp_path / ".evaluation/check.py").write_text(
+        "import sys\n"
+        "print('hidden expected stdout')\n"
+        "print('hidden expected stderr', file=sys.stderr)\n"
+        "raise SystemExit(1)\n"
+    )
+
+    result = CommandScorer("command", ("python", ".evaluation/check.py")).score(
+        SCORING_TASK,
+        observed,
+    )
+
+    assert not result.passed
+    assert "hidden expected" not in result.details
+    assert result.details.startswith("exit_code=1; stdout_bytes=")
+    assert "stderr_bytes=" in result.details
+
+
+def test_command_scorer_does_not_mutate_evidence_workspace(tmp_path: Path) -> None:
+    observed = evidence(tmp_path)
+    (tmp_path / ".evaluation/check.py").write_text(
+        "from pathlib import Path\n"
+        "Path('src/example.py').write_text('mutated by scorer')\n"
+        "raise SystemExit(0)\n"
+    )
+
+    result = CommandScorer("command", ("python", ".evaluation/check.py")).score(
+        SCORING_TASK,
+        observed,
+    )
+
+    assert result.passed
+    assert (tmp_path / "src/example.py").read_text() == "def add(a, b):\n    return a + b\n"

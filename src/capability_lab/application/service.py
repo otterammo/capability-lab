@@ -174,6 +174,8 @@ class LabService:
         if not cleanup_succeeded:
             classification = FailureClassification.ENVIRONMENT
         status = "succeeded" if classification is FailureClassification.SUCCESS else "failed"
+        if failure is None:
+            failure = _score_error(scores)
         termination_reason = (
             "timeout"
             if harness_result.timed_out
@@ -272,3 +274,7 @@ class LabService:
 
 def _json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
+
+
+def _score_error(scores: tuple[ScoreResult, ...]) -> str | None:
+    return next((score.error for score in scores if score.error), None)

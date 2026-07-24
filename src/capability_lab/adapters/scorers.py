@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,22 +56,29 @@ class CommandScorer:
     command: tuple[str, ...]
 
     def score(self, task: Task, evidence: EvaluationEvidence) -> ScoreResult:
-        command = tuple(
-            part.replace("{workspace}", str(evidence.workspace)) for part in self.command
-        )
-        if command and command[0] == "python":
-            command = (sys.executable, *command[1:])
-        try:
-            result = subprocess.run(
-                command,
-                cwd=evidence.workspace,
-                capture_output=True,
-                text=True,
-                timeout=task.budget.timeout_seconds if task is not None else 30,
+        with tempfile.TemporaryDirectory(prefix="capability-lab-scorer-") as tmpdir:
+            scoring_workspace = Path(tmpdir) / "workspace"
+            shutil.copytree(evidence.workspace, scoring_workspace)
+            command = tuple(
+                part.replace("{workspace}", str(scoring_workspace)) for part in self.command
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return ScoreResult(self.id, False, error=str(exc), category="verification")
-        details = (result.stdout + result.stderr).strip()
+            if command and command[0] == "python":
+                command = (sys.executable, *command[1:])
+            try:
+                result = subprocess.run(
+                    command,
+                    cwd=scoring_workspace,
+                    capture_output=True,
+                    text=True,
+                    timeout=task.budget.timeout_seconds if task is not None else 30,
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                return ScoreResult(self.id, False, error=str(exc), category="verification")
+        details = (
+            f"exit_code={result.returncode}; "
+            f"stdout_bytes={len(result.stdout.encode(errors='surrogateescape'))}; "
+            f"stderr_bytes={len(result.stderr.encode(errors='surrogateescape'))}"
+        )
         return ScoreResult(self.id, result.returncode == 0, details, "verification")
 
 
