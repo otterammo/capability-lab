@@ -58,7 +58,11 @@ class CommandScorer:
     def score(self, task: Task, evidence: EvaluationEvidence) -> ScoreResult:
         with tempfile.TemporaryDirectory(prefix="capability-lab-scorer-") as tmpdir:
             scoring_workspace = Path(tmpdir) / "workspace"
-            shutil.copytree(evidence.workspace, scoring_workspace)
+            shutil.copytree(
+                evidence.workspace,
+                scoring_workspace,
+                ignore=shutil.ignore_patterns(".git"),
+            )
             command = tuple(
                 part.replace("{workspace}", str(scoring_workspace)) for part in self.command
             )

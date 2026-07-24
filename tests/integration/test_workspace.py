@@ -48,3 +48,24 @@ def test_collect_diff_reports_both_paths_for_rename(tmp_path: Path) -> None:
     manager.destroy(workspace)
 
     assert diff.changed_paths == ("new.py", "old.py")
+
+
+def test_collect_diff_captures_ignored_untracked_files(tmp_path: Path) -> None:
+    template = tmp_path / "template"
+    template.mkdir()
+    (template / ".gitignore").write_text("generated/\n")
+    (template / "example.py").write_text("wrong\n")
+    source = tmp_path / "fixtures" / "fixture"
+    revision = ensure_fixture_repository(template, source)
+    manager = GitWorktreeManager(tmp_path / "worktrees", tmp_path / "fixtures")
+    workspace = manager.prepare(RepositorySpec("fixture", revision), revision, "run-ignored")
+
+    generated = workspace.path / "generated" / "answer.txt"
+    generated.parent.mkdir()
+    generated.write_text("hidden harness output\n")
+    diff = manager.collect_diff(workspace)
+    manager.destroy(workspace)
+
+    assert diff.changed_paths == ("generated/answer.txt",)
+    assert "diff --git a/generated/answer.txt b/generated/answer.txt" in diff.patch
+    assert "+hidden harness output" in diff.patch

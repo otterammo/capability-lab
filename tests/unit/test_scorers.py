@@ -119,3 +119,18 @@ def test_command_scorer_does_not_mutate_evidence_workspace(tmp_path: Path) -> No
 
     assert result.passed
     assert (tmp_path / "src/example.py").read_text() == "def add(a, b):\n    return a + b\n"
+
+
+def test_command_scorer_copy_does_not_expose_git_metadata(tmp_path: Path) -> None:
+    observed = evidence(tmp_path)
+    (tmp_path / ".git").write_text("gitdir: /original/worktree/gitdir\n")
+    (tmp_path / ".evaluation/check.py").write_text(
+        "from pathlib import Path\nraise SystemExit(0 if not Path('.git').exists() else 1)\n"
+    )
+
+    result = CommandScorer("command", ("python", ".evaluation/check.py")).score(
+        SCORING_TASK,
+        observed,
+    )
+
+    assert result.passed
