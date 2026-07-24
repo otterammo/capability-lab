@@ -1,0 +1,1 @@
+"""Validated boundary schemas."""

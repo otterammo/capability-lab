@@ -1,0 +1,11 @@
+{
+  "id": "smoke",
+  "version": "1.0.0",
+  "channel": "development",
+  "tasks": [
+    {
+      "path": "../tasks/python.fix-incorrect-return@1.0.0.yaml",
+      "sha256": "857fc8a724d361739810647eafde1cbca45c77719d10971835d26bda0482fb64"
+    }
+  ]
+}

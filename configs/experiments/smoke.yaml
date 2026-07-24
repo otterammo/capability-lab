@@ -1,0 +1,4 @@
+{
+  "name": "smoke",
+  "benchmark": "benchmarks/releases/smoke@1.0.1.yaml"
+}

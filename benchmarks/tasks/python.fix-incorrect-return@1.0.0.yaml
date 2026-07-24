@@ -1,0 +1,33 @@
+{
+  "id": "python.fix-incorrect-return",
+  "version": "1.0.0",
+  "capabilities": [
+    "repository.navigation",
+    "code.localization",
+    "patch.generation",
+    "change.verification"
+  ],
+  "repository": {
+    "fixture": "incorrect-function",
+    "revision": "c10d52843b89e47b328c197fe1f0e1ff2787bf7b"
+  },
+  "prompt": "The add function is incorrect. Make the smallest source change that fixes it.",
+  "budget": {"timeout_seconds": 30, "max_tool_calls": 1},
+  "scorers": [
+    {"id": "protected-test", "type": "command", "script": "../protected/check_behavior.py"},
+    {
+      "id": "exact-content",
+      "type": "exact-content",
+      "path": "src/example.py",
+      "expected_path": "../protected/expected_example.py"
+    },
+    {"id": "allowed-scope", "type": "allowed-diff", "paths": ["src/example.py"]},
+    {"id": "evaluator-protection", "type": "forbidden-path", "paths": [".evaluation"]}
+  ],
+  "metadata": {
+    "difficulty": "basic",
+    "language": "python",
+    "ambiguity": "low",
+    "expected_change": true
+  }
+}

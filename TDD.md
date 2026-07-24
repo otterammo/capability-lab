@@ -18,7 +18,7 @@ The initial implementation is a Python modular monolith. External systems sit be
 
 | Concern | Decision | Deferred alternative |
 |---|---|---|
-| Language | Python 3.13 with `uv` | TypeScript, Rust |
+| Language | Python 3.13.7 with `uv` | TypeScript, Rust |
 | Architecture | Modular monolith | Microservices |
 | CLI | Typer command named `lab` | Web UI |
 | Validation | Pydantic at configuration boundaries | Hand-written validation |

@@ -1,0 +1,9 @@
+.lab/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.import_linter_cache/
+*.pyc
+*.egg-info/
