@@ -10,6 +10,8 @@ from capability_lab.domain.rules import classify
         (HarnessResult(exit_code=0), (ScoreResult("exact", True),), "success"),
         (HarnessResult(exit_code=1, failure_kind="environment"), (), "environment"),
         (HarnessResult(exit_code=124, timed_out=True), (), "timeout"),
+        (HarnessResult(exit_code=1, failure_kind="model_runtime"), (), "model_runtime"),
+        (HarnessResult(exit_code=1, failure_kind="tool_budget"), (), "tool_execution"),
         (HarnessResult(exit_code=0), (ScoreResult("exact", False, category="editing"),), "editing"),
         (
             HarnessResult(exit_code=0),

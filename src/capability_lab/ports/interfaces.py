@@ -11,10 +11,12 @@ from capability_lab.domain.models import (
     Experiment,
     HarnessRequest,
     HarnessResult,
+    ModelIdentity,
     PreparedWorkspace,
     RepositorySpec,
     Run,
     RunResult,
+    SandboxResult,
     ScoreResult,
     ScorerSpec,
     Task,
@@ -24,6 +26,14 @@ from capability_lab.domain.models import (
 
 class Harness(Protocol):
     def execute(self, request: HarnessRequest, context: ExecutionContext) -> HarnessResult: ...
+
+
+class Sandbox(Protocol):
+    def execute(self, argv: tuple[str, ...], context: ExecutionContext) -> SandboxResult: ...
+
+
+class ModelProvider(Protocol):
+    def identity(self, expected_digest: str | None = None) -> ModelIdentity: ...
 
 
 class WorkspaceManager(Protocol):

@@ -13,6 +13,8 @@ class FailureClassification(StrEnum):
     VERIFICATION = "verification"
     ENVIRONMENT = "environment"
     TIMEOUT = "timeout"
+    MODEL_RUNTIME = "model_runtime"
+    TOOL_EXECUTION = "tool_execution"
     EVALUATOR = "evaluator"
     UNKNOWN = "unknown"
 
@@ -20,6 +22,7 @@ class FailureClassification(StrEnum):
 @dataclass(frozen=True, slots=True)
 class HarnessSettings:
     mode: str
+    kind: str = "fake"
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,12 +34,50 @@ class RuntimePaths:
 
 
 @dataclass(frozen=True, slots=True)
+class SandboxSettings:
+    image: str
+    cpus: float
+    memory_mb: int
+    pids: int
+    nofile: int
+    max_output_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class ModelSettings:
+    provider: str
+    name: str
+    base_url: str
+    timeout_seconds: float
+    temperature: float
+    context_window: int
+    max_output_tokens: int
+    expected_digest: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ModelIdentity:
+    provider: str
+    name: str
+    digest: str
+    format: str
+    family: str
+    parameter_size: str
+    quantization_level: str
+    capabilities: tuple[str, ...]
+    server_version: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class RunSettings:
     name: str
     benchmark: str
     harness: HarnessSettings
     paths: RuntimePaths
+    sandbox: SandboxSettings
     seed: int
+    repetition_count: int
+    model: ModelSettings | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +92,7 @@ class DoctorCheck:
     name: str
     passed: bool
     details: str
+    required: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +179,38 @@ class HarnessRequest:
 class ExecutionContext:
     workspace: Path
     timeout_seconds: int
+    max_tool_calls: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxIdentity:
+    image_id: str
+    docker_version: str
+    user: str
+    dockerfile_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class NetworkPolicy:
+    name: str
+    endpoint: str | None
+    external_access: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxProvenance:
+    identity: SandboxIdentity
+    network_policy: NetworkPolicy
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxResult:
+    exit_code: int
+    stdout: str
+    stderr: str
+    timed_out: bool
+    output_limited: bool
+    provenance: SandboxProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +220,8 @@ class HarnessResult:
     final_response: str = ""
     failure_kind: str | None = None
     timed_out: bool = False
+    output_limited: bool = False
+    sandbox_provenance: SandboxProvenance | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,7 +273,9 @@ class RunProvenance:
     platform_dirty: bool
     harness_version: str = "fake@1.0.0"
     scorer_version: str = "deterministic@1.0.0"
-    network: str = "not_enforced"
+    sandbox_provenance: SandboxProvenance | None = None
+    model_identity: ModelIdentity | None = None
+    reproducible: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,3 +297,36 @@ class RunResult:
     budget: ExecutionBudget = field(default_factory=lambda: ExecutionBudget(0, 0))
     provenance: RunProvenance | None = None
     artifacts: tuple[RunArtifact, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class EqualityEvidence:
+    dimension: str
+    baseline: Any
+    candidate: Any
+    equal: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ComparisonOutcome:
+    run_id: str
+    config_hash: str
+    classification: FailureClassification
+    scores: tuple[tuple[str, bool], ...]
+    duration_ms: int
+    timed_out: bool
+    intervention_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ComparisonResult:
+    id: str
+    baseline: ComparisonOutcome
+    candidate: ComparisonOutcome
+    duration_delta_ms: int
+    timeout_delta: int
+    intervention_delta: int
+    repetition_count: int
+    equality: tuple[EqualityEvidence, ...]
+    comparable: bool
+    artifact: ArtifactRef | None = None

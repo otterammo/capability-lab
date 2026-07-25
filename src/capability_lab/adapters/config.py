@@ -14,9 +14,11 @@ from pydantic import BaseModel, ValidationError
 
 from capability_lab.domain.models import (
     HarnessSettings,
+    ModelSettings,
     ResolvedConfiguration,
     RunSettings,
     RuntimePaths,
+    SandboxSettings,
 )
 from capability_lab.schemas.config import LabConfig
 
@@ -60,10 +62,18 @@ def resolve_config(
     harness_profile: Path,
     experiment: Path,
     cli_overrides: Mapping[str, Any] | None = None,
+    *,
+    model_profile: Path | None = None,
 ) -> ResolvedConfiguration:
     merged: dict[str, Any] = {}
     provenance: list[str] = []
-    for path in (defaults, harness_profile, experiment):
+    paths = (
+        defaults,
+        *((model_profile,) if model_profile is not None else ()),
+        harness_profile,
+        experiment,
+    )
+    for path in paths:
         merged = _merge(merged, _read_yaml(path))
         provenance.append(str(path))
     merged = _merge(merged, cli_overrides or {})
@@ -76,9 +86,12 @@ def resolve_config(
     settings = RunSettings(
         name=config.name,
         benchmark=config.benchmark,
-        harness=HarnessSettings(config.harness.mode),
+        harness=HarnessSettings(config.harness.mode, config.harness.kind),
         paths=RuntimePaths(**config.paths.model_dump()),
+        sandbox=SandboxSettings(**config.sandbox.model_dump()),
         seed=config.seed,
+        repetition_count=config.repetition_count,
+        model=ModelSettings(**config.model.model_dump()) if config.model is not None else None,
     )
     digest = hashlib.sha256(canonical_json(settings)).hexdigest()
     return ResolvedConfiguration(settings, digest, tuple(provenance))

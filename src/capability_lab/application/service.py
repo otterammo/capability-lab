@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -11,7 +11,10 @@ from uuid import uuid4
 from capability_lab.domain.models import (
     ArtifactPayload,
     BenchmarkRelease,
+    ComparisonOutcome,
+    ComparisonResult,
     DoctorCheck,
+    EqualityEvidence,
     EvaluationEvidence,
     ExecutionContext,
     Experiment,
@@ -80,8 +83,16 @@ class LabService:
         harness_profile: Path,
         experiment_path: Path,
         overrides: Mapping[str, Any] | None = None,
+        *,
+        model_profile: Path | None = None,
     ) -> ResolvedConfiguration:
-        return self.config_loader(defaults, harness_profile, experiment_path, overrides)
+        return self.config_loader(
+            defaults,
+            harness_profile,
+            experiment_path,
+            overrides,
+            model_profile=model_profile,
+        )
 
     def validate_benchmark(self, release_path: Path) -> BenchmarkRelease:
         self.fixture_initializer()
@@ -101,8 +112,19 @@ class LabService:
         harness_profile: Path,
         experiment_path: Path,
         overrides: Mapping[str, Any] | None = None,
+        *,
+        model_profile: Path | None = None,
     ) -> RunResult:
-        config = self.resolve_configuration(defaults, harness_profile, experiment_path, overrides)
+        config = self.resolve_configuration(
+            defaults,
+            harness_profile,
+            experiment_path,
+            overrides,
+            model_profile=model_profile,
+        )
+        return self._run_resolved(config)
+
+    def _run_resolved(self, config: ResolvedConfiguration) -> RunResult:
         benchmark = self.validate_benchmark(self.project_root / config.value.benchmark)
         if len(benchmark.tasks) != 1:
             raise ValueError("the deterministic slice requires exactly one smoke task")
@@ -113,6 +135,8 @@ class LabService:
         experiment_id = f"exp-{uuid4()}"
         run_id = f"run-{uuid4()}"
         provenance = self.provenance_builder(config, benchmark, task)
+        if config.value.harness.kind != "fake":
+            provenance = replace(provenance, reproducible=False)
         runtime.metadata.create_experiment(
             Experiment(
                 experiment_id,
@@ -145,8 +169,18 @@ class LabService:
             )
             harness_result = runtime.harness.execute(
                 HarnessRequest(task.id, task.prompt, config.value.harness.mode),
-                ExecutionContext(workspace.path, task.budget.timeout_seconds),
+                ExecutionContext(
+                    workspace.path,
+                    task.budget.timeout_seconds,
+                    task.budget.max_tool_calls,
+                ),
             )
+            if harness_result.sandbox_provenance is not None:
+                provenance = replace(
+                    provenance,
+                    sandbox_provenance=harness_result.sandbox_provenance,
+                    reproducible=provenance.model_identity is not None,
+                )
             diff = runtime.workspaces.collect_diff(workspace)
             evidence = EvaluationEvidence(workspace.path, diff)
             for spec in task.scorers:
@@ -224,6 +258,65 @@ class LabService:
         runtime.metadata.complete_run(result)
         return result
 
+    def compare(
+        self,
+        defaults: Path,
+        baseline_harness_profile: Path,
+        candidate_harness_profile: Path,
+        experiment_path: Path,
+        overrides: Mapping[str, Any] | None = None,
+        *,
+        model_profile: Path | None = None,
+    ) -> ComparisonResult:
+        baseline_config = self.resolve_configuration(
+            defaults,
+            baseline_harness_profile,
+            experiment_path,
+            overrides,
+            model_profile=model_profile,
+        )
+        candidate_config = self.resolve_configuration(
+            defaults,
+            candidate_harness_profile,
+            experiment_path,
+            overrides,
+            model_profile=model_profile,
+        )
+        if any(
+            config.value.model is None or config.value.model.base_url != "http://desktop:11434"
+            for config in (baseline_config, candidate_config)
+        ):
+            raise ValueError("comparison requires OLLAMA_HOST=http://desktop:11434")
+        if (
+            baseline_config.value.harness.kind,
+            candidate_config.value.harness.kind,
+        ) != ("raw-ollama", "pi"):
+            raise ValueError("comparison requires baseline raw-ollama and candidate pi")
+        baseline = self._run_resolved(baseline_config)
+        candidate = self._run_resolved(candidate_config)
+        equality = comparison_equality(baseline_config, candidate_config, baseline, candidate)
+        baseline_outcome = _comparison_outcome(baseline, baseline_config.hash)
+        candidate_outcome = _comparison_outcome(candidate, candidate_config.hash)
+        comparison = ComparisonResult(
+            id=f"cmp-{uuid4()}",
+            baseline=baseline_outcome,
+            candidate=candidate_outcome,
+            duration_delta_ms=candidate.duration_ms - baseline.duration_ms,
+            timeout_delta=int(candidate_outcome.timed_out) - int(baseline_outcome.timed_out),
+            intervention_delta=(candidate.intervention_count - baseline.intervention_count),
+            repetition_count=baseline_config.value.repetition_count,
+            equality=equality,
+            comparable=all(item.equal for item in equality),
+        )
+        ref = self.runtime_builder(baseline_config).artifacts.put(
+            ArtifactPayload(
+                comparison.id,
+                "comparison.json",
+                _json(asdict(comparison)),
+            )
+        )
+        return replace(comparison, artifact=ref)
+
     @staticmethod
     def _persist_artifacts(
         store: ArtifactStore,
@@ -278,3 +371,106 @@ def _json(value: Any) -> bytes:
 
 def _score_error(scores: tuple[ScoreResult, ...]) -> str | None:
     return next((score.error for score in scores if score.error), None)
+
+
+def comparison_equality(
+    baseline_config: ResolvedConfiguration,
+    candidate_config: ResolvedConfiguration,
+    baseline: RunResult,
+    candidate: RunResult,
+) -> tuple[EqualityEvidence, ...]:
+    baseline_model = baseline_config.value.model
+    candidate_model = candidate_config.value.model
+    baseline_provenance = baseline.provenance
+    candidate_provenance = candidate.provenance
+    dimensions = (
+        (
+            "model_name",
+            None if baseline_model is None else baseline_model.name,
+            None if candidate_model is None else candidate_model.name,
+        ),
+        (
+            "model_digest",
+            None
+            if baseline_provenance is None or baseline_provenance.model_identity is None
+            else baseline_provenance.model_identity.digest,
+            None
+            if candidate_provenance is None or candidate_provenance.model_identity is None
+            else candidate_provenance.model_identity.digest,
+        ),
+        (
+            "ollama_endpoint",
+            None if baseline_model is None else baseline_model.base_url,
+            None if candidate_model is None else candidate_model.base_url,
+        ),
+        (
+            "benchmark_hash",
+            None if baseline_provenance is None else baseline_provenance.benchmark_hash,
+            None if candidate_provenance is None else candidate_provenance.benchmark_hash,
+        ),
+        (
+            "task_hash",
+            None if baseline_provenance is None else baseline_provenance.task_hash,
+            None if candidate_provenance is None else candidate_provenance.task_hash,
+        ),
+        ("task_timeout", baseline.budget.timeout_seconds, candidate.budget.timeout_seconds),
+        ("tool_budget", baseline.budget.max_tool_calls, candidate.budget.max_tool_calls),
+        ("seed", baseline_config.value.seed, candidate_config.value.seed),
+        (
+            "temperature",
+            None if baseline_model is None else baseline_model.temperature,
+            None if candidate_model is None else candidate_model.temperature,
+        ),
+        (
+            "context_window",
+            None if baseline_model is None else baseline_model.context_window,
+            None if candidate_model is None else candidate_model.context_window,
+        ),
+        (
+            "max_output_tokens",
+            None if baseline_model is None else baseline_model.max_output_tokens,
+            None if candidate_model is None else candidate_model.max_output_tokens,
+        ),
+        (
+            "sandbox_constraints",
+            asdict(baseline_config.value.sandbox),
+            asdict(candidate_config.value.sandbox),
+        ),
+        (
+            "sandbox_identity",
+            None
+            if baseline_provenance is None or baseline_provenance.sandbox_provenance is None
+            else asdict(baseline_provenance.sandbox_provenance),
+            None
+            if candidate_provenance is None or candidate_provenance.sandbox_provenance is None
+            else asdict(candidate_provenance.sandbox_provenance),
+        ),
+        (
+            "repetition_count",
+            baseline_config.value.repetition_count,
+            candidate_config.value.repetition_count,
+        ),
+    )
+    return tuple(
+        EqualityEvidence(
+            name,
+            baseline_value,
+            candidate_value,
+            baseline_value is not None
+            and candidate_value is not None
+            and baseline_value == candidate_value,
+        )
+        for name, baseline_value, candidate_value in dimensions
+    )
+
+
+def _comparison_outcome(result: RunResult, config_hash: str) -> ComparisonOutcome:
+    return ComparisonOutcome(
+        run_id=result.run_id,
+        config_hash=config_hash,
+        classification=result.classification,
+        scores=tuple((score.scorer_id, score.passed) for score in result.scores),
+        duration_ms=result.duration_ms,
+        timed_out=result.termination_reason == "timeout",
+        intervention_count=result.intervention_count,
+    )

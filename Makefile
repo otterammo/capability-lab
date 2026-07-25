@@ -1,6 +1,9 @@
 export PYTHONPATH := src
 
-.PHONY: setup format format-check lint typecheck test test-unit test-contract test-integration test-end-to-end architecture security check smoke diff-check
+CONFIG_PATH ?= configs/defaults.yaml
+export CONFIG_PATH
+
+.PHONY: setup format format-check lint typecheck test test-unit test-contract test-integration test-end-to-end test-docker architecture security check smoke diff-check sandbox-image
 
 setup:
 	uv sync --all-groups
@@ -50,3 +53,9 @@ diff-check:
 	git diff --check
 	git diff --cached --check
 	git status --short
+
+sandbox-image:
+	@python3 -c 'import json, os, re, sys; image = json.load(open(os.environ["CONFIG_PATH"], encoding="utf-8"))["sandbox"]["image"]; valid = isinstance(image, str) and re.fullmatch(r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?", image); image if valid else sys.exit("invalid sandbox.image"); os.execvp("docker", ["docker", "build", "--tag", image, "--file", "docker/sandbox/Dockerfile", "."])'
+
+test-docker: sandbox-image
+	CAPABILITY_LAB_DOCKER_TESTS=1 uv run pytest tests/integration/test_docker_sandbox.py

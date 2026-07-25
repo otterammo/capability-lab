@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
@@ -10,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from capability_lab.bootstrap import build_service
-from capability_lab.domain.models import FailureClassification
+from capability_lab.domain.models import ComparisonResult, FailureClassification, RunResult
 
 app = typer.Typer(help="Deterministic local capability experiments.", no_args_is_help=True)
 config_app = typer.Typer(help="Resolve experiment configuration.")
@@ -38,9 +39,10 @@ def doctor() -> None:
     checks = build_service(_root()).doctor()
     table = Table("Check", "Status", "Details")
     for check in checks:
-        table.add_row(check.name, "ok" if check.passed else "fail", check.details)
+        status = "ok" if check.passed else "fail" if check.required else "optional-missing"
+        table.add_row(check.name, status, check.details)
     console.print(table)
-    if not all(check.passed for check in checks):
+    if any(check.required and not check.passed for check in checks):
         raise typer.Exit(1)
 
 
@@ -48,14 +50,16 @@ def doctor() -> None:
 def config_resolve(
     experiment: Annotated[Path, typer.Argument()] = Path("configs/experiments/smoke.yaml"),
     seed: Annotated[int | None, typer.Option("--seed")] = None,
+    model_profile: Annotated[Path | None, typer.Option("--model-profile")] = None,
 ) -> None:
-    """Resolve defaults, fake-harness profile, experiment, and CLI overrides."""
+    """Resolve defaults, optional model, fake harness, experiment, and CLI overrides."""
     root = _root()
     resolved = build_service(root).resolve_configuration(
         root / "configs/defaults.yaml",
         root / "configs/harnesses/fake.yaml",
         root / experiment,
         {} if seed is None else {"seed": seed},
+        model_profile=None if model_profile is None else root / model_profile,
     )
     console.print(json.dumps(asdict(resolved.value), sort_keys=True, separators=(",", ":")))
     console.print(f"config hash: {resolved.hash}")
@@ -79,6 +83,48 @@ def smoke() -> None:
     """Run the deterministic smoke benchmark end to end."""
     root = _root()
     result = build_service(root).run(*_paths(root))
+    _render_run(result)
+
+
+@app.command()
+def run(
+    experiment: Annotated[Path, typer.Argument()] = Path("configs/experiments/pi-smoke.yaml"),
+) -> None:
+    """Run one explicit Pi experiment profile through the local Ollama model."""
+    root = _root()
+    ollama_host = os.environ.get("OLLAMA_HOST")
+    result = build_service(root).run(
+        root / "configs/defaults.yaml",
+        root / "configs/harnesses/pi.yaml",
+        root / experiment,
+        overrides=(None if ollama_host is None else {"model": {"base_url": ollama_host}}),
+        model_profile=root / "configs/models/ollama.yaml",
+    )
+    _render_run(result)
+
+
+@app.command()
+def compare(
+    experiment: Annotated[Path, typer.Argument()] = Path("configs/experiments/raw-vs-pi.yaml"),
+) -> None:
+    """Run one raw-Ollama versus Pi comparison."""
+    root = _root()
+    ollama_host = os.environ.get("OLLAMA_HOST")
+    if ollama_host != "http://desktop:11434":
+        console.print("OLLAMA_HOST must be exactly http://desktop:11434")
+        raise typer.Exit(2)
+    result = build_service(root).compare(
+        root / "configs/defaults.yaml",
+        root / "configs/harnesses/raw-ollama.yaml",
+        root / "configs/harnesses/pi.yaml",
+        root / experiment,
+        overrides={"model": {"base_url": ollama_host}},
+        model_profile=root / "configs/models/ollama.yaml",
+    )
+    _render_comparison(result)
+
+
+def _render_run(result: RunResult) -> None:
     table = Table("Scorer", "Passed", "Details")
     for score in result.scores:
         table.add_row(score.scorer_id, str(score.passed).lower(), score.details)
@@ -92,6 +138,17 @@ def smoke() -> None:
     if result.classification is not FailureClassification.SUCCESS:
         if result.failure:
             console.print(f"Failure: {result.failure}")
+        raise typer.Exit(1)
+
+
+def _render_comparison(result: ComparisonResult) -> None:
+    console.print(f"Comparison ID: {result.id}")
+    console.print(f"Baseline run: {result.baseline.run_id}")
+    console.print(f"Candidate run: {result.candidate.run_id}")
+    console.print(f"Comparable: {str(result.comparable).lower()}")
+    if result.artifact is not None:
+        console.print(f"Report: {result.artifact.run_path}")
+    if not result.comparable:
         raise typer.Exit(1)
 
 

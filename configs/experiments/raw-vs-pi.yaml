@@ -1,0 +1,5 @@
+{
+  "name": "raw-vs-pi",
+  "benchmark": "benchmarks/releases/smoke@1.0.1.yaml",
+  "repetition_count": 1
+}

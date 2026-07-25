@@ -1,0 +1,11 @@
+{
+  "model": {
+    "provider": "ollama",
+    "name": "qwen2.5-coder:1.5b",
+    "base_url": "http://127.0.0.1:11434",
+    "timeout_seconds": 2.0,
+    "temperature": 0.0,
+    "context_window": 32768,
+    "max_output_tokens": 512
+  }
+}

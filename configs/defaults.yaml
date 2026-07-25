@@ -8,5 +8,13 @@
     "worktrees": ".lab/worktrees",
     "fixtures": ".lab/fixtures"
   },
+  "sandbox": {
+    "image": "capability-lab-sandbox:0.1.0",
+    "cpus": 1.0,
+    "memory_mb": 512,
+    "pids": 128,
+    "nofile": 256,
+    "max_output_bytes": 1048576
+  },
   "seed": 1
 }
